@@ -1,0 +1,211 @@
+---
+title: "HW6"
+author: "Sophia Haig"
+format: html
+editor: visual
+---
+
+```{r}
+#Load Libraries
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+#Question 1: 
+
+# I loaded the dataset from my plan 372 folder.
+data <- read_csv("/Users/sophiahaig/Desktop/PLAN372/HW6/TS3_Raw_tree_data.csv", show_col_types = FALSE)
+
+# I then extracted city and state from the "city" column using an expression. The expressions I made for city extracts everything before the comma and the one I made for state extracts the state abbreviations after the comma. 
+data <- data %>%
+  mutate(
+    city_name = str_extract(City, "^[^,]+"),         # Extract everything before the comma
+    state_abbr = str_extract(City, "(?<=,\\s)[A-Z]+") # Extract state abbreviation after the comma
+  )
+
+# I then counted the records per state using count function
+state_counts <- data %>%
+  count(state_abbr, name = "record_count") %>%
+  arrange(desc(record_count))
+
+# Then I just displayed the state counts table
+state_counts
+
+# After extracting, I created a bar plot of records per state using ggplot and I set the title, x and y axises. 
+ggplot(state_counts, aes(x = reorder(state_abbr, -record_count), y = record_count)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Number of Records Per State",
+    x = "State",
+    y = "Record Count"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Question 2: 
+
+#First I filtered the dataset for North Carolina and South Carolina 
+data_nc_sc <- data %>%
+  filter(state_abbr %in% c("NC", "SC"))
+
+# Next, I extracted the cities they used in North and South Carolina. 
+cities_nc_sc <- data_nc_sc %>%
+  select(city_name) %>%
+  distinct() %>%
+  arrange(city_name)
+
+# Then, I used print function to display the unique cities. 
+print(cities_nc_sc)
+```
+
+```{r}
+#Question 3: 
+
+# I filtered for NC and SC again like I did in Q2. 
+# Ensure `AvgCdia (m)` column is used correctly
+data_nc_sc <- data_nc_sc %>%
+  filter(!is.na(`AvgCdia (m)`)) 
+
+# Then I extracted the genus using an expression. 
+# Assuming the column with scientific names is "ScientificName"
+data_nc_sc <- data_nc_sc %>%
+  mutate(genus = str_extract(ScientificName, "^[^\\s]+")) 
+# This expression extract the first word which would be genus. 
+
+# Then I calculated the average canopy diameter for each genus.
+genus_avg_crown <- data_nc_sc %>%
+  group_by(genus) %>%
+  summarise(
+    avg_crown_diameter = mean(`AvgCdia (m)`, na.rm = TRUE), 
+    count = n() 
+  ) %>%
+  arrange(desc(avg_crown_diameter)) 
+
+# I then displayed the genus with the largest average crown diameter and used the slice function to get the top genus. 
+largest_crown_genus <- genus_avg_crown %>%
+  slice(1) 
+
+# Then i used print to view the results. 
+print(genus_avg_crown)
+print(largest_crown_genus)
+```
+
+## 
+
+```{r}
+
+#Extra Credit 1: 
+
+# First I made sure the Age column had no NA values just in case.
+data_nc_sc <- data_nc_sc %>%
+  filter(!is.na(Age)) 
+
+# Then, I calculated average age and crown diameter by genus by mean and used count to get the number of species per genus. 
+genus_summary <- data_nc_sc %>%
+  group_by(genus) %>%
+  summarise(
+    avg_age = mean(Age, na.rm = TRUE), 
+    avg_crown_diameter = mean(`AvgCdia (m)`, na.rm = TRUE),
+    count = n() 
+  ) %>%
+  arrange(desc(avg_crown_diameter))
+
+# Then I used correlation function to see if there was a correlation between age and crown size. 
+correlation <- cor(genus_summary$avg_age, genus_summary$avg_crown_diameter, use = "complete.obs")
+
+# Then I used print to get the summary table and correlation
+print(genus_summary)
+cat("Correlation between average age and crown diameter:", correlation, "\n")
+
+### Written answer: 
+##Are there differences in the average age of the different genera of trees in the dataset?
+
+#Yes, the dataset shows that different genera have varying average ages.
+
+##Might this explain the results of the previous question (largest crown diameter)?
+
+# It explains the results to some extent. The moderate correlation (0.408) indicates that older trees tend to have larger crowns. However, the relationship is not strong enough to fully explain the variation in crown sizes among genera. Other factors, such as the natural growth patterns of certain tree types, likely play a role.
+```
+
+```{r }
+
+# Extra credit 1.2: 
+# First I added a growth efficiency variable which was crown size per year and sorted in descending order
+genus_summary <- genus_summary %>%
+  mutate(growth_efficiency = avg_crown_diameter / avg_age) %>%
+  arrange(desc(growth_efficiency)) 
+
+# Then I used ggplot to visualize the relationship between crown size and age. The bubbles on the graph visualize the growth efficiency variable I just made, with bigger circles indicating higher growth efficiency. I set all the y and x axises and titles etc. 
+ggplot(genus_summary, aes(x = avg_age, y = avg_crown_diameter, size = growth_efficiency)) +
+  geom_point(alpha = 0.7) +
+  geom_text(aes(label = genus), hjust = 1.2, vjust = 0.5, size = 3, check_overlap = TRUE) +
+  labs(
+    title = "Crown Size vs. Age Across Genera (NC/SC)",
+    x = "Average Age (years)",
+    y = "Average Crown Diameter (m)",
+    size = "Growth Efficiency"
+  ) +
+  theme_minimal()
+
+# Then I recommend a genus based on growth efficiency and used slice function to select the genus with the highest growth. 
+recommended_genus <- genus_summary %>%
+  slice(1) 
+
+#Then I printed the name of the recommended genus to display it
+print(recommended_genus)
+
+#The recommendation of Ulmus as the genus is based on the growth efficiency metric, which measures the ratio of crown size to average age. The gro
+```
+
+```{r}
+#Extra Credit 2
+# I extracted the genus and species from the scientific name as I did similarly to question 1. The expression I made extracts the first word as genus. The second one extracts the species and ignores all the instuctions given such as x in between genus and species names, cultivars and also variety. 
+data_nc_sc <- data_nc_sc %>%
+  mutate(
+    genus = str_extract(ScientificName, "^[^\\s]+"), 
+    species = str_extract(ScientificName, "(?<=\\s)[^\\s‘\"(]+") %>% 
+      str_remove_all("^x") %>% 
+      str_remove_all("['\"].*") %>% 
+      str_remove_all("var\\..*") 
+  )
+
+# Then I counted all the species within each genus and used count to get the total number for each genus. 
+species_counts <- data_nc_sc %>%
+  group_by(genus) %>%
+  summarise(
+    num_species = n_distinct(species), 
+    count = n() 
+  ) %>%
+  arrange(desc(num_species))
+
+# I used print to display my results
+print(species_counts)
+
+# Then I made a car plot of species counts per genus so it's easier to view the results. I set all the y and x axies and titles etc. 
+library(ggplot2)
+ggplot(species_counts, aes(x = reorder(genus, -num_species), y = num_species)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Number of Species per Genus (NC/SC)",
+    x = "Genus",
+    y = "Number of Species"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Then I summed the num_species column in the species_counts dataset to get the total number of of species. 
+total_species_count <- sum(species_counts$num_species)
+
+# Lastly I printed the total number of species. 
+cat("Total number of species in the dataset:", total_species_count, "\n")
+
+
+### I found that there are 30 species within each genus tree for North Carolina and South Carolina. 
+
+```
+
+```{This metric prioritizes genera that achieve large crowns quickly, making it an ideal choice for maximizing shade in a shorter time span. Ulmus had one of the highest growth efficiencies, and has both a large number of observations and a consistently high crown-to-age ratio.}
+```
